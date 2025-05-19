@@ -19,9 +19,7 @@ export default async function handler(req, res) {
   /* ───── Shared‑secret guard ───── */
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(401).json({ error: 'Unauthorized' });
-  return res.status(200).json({
-    reply: 'Hello, world!'
-  });
+
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
   try {
@@ -30,7 +28,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON body' });
   }
 
-
+  return res.status(200).json({
+    reply: body.user
+  });
   //const userPrompt = body.user;
 
   if (!process.env.OPENAI_API_KEY)
