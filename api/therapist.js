@@ -22,12 +22,10 @@ export default async function handler(req, res) {
 
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
-  if (typeof body !== 'object' || body === null) {
-    try {
-      body = JSON.parse(req.body);
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON body' });
-    }
+  try {
+    body = JSON.parse(req.body);
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON body' });
   }
 
   const userPrompt = 'I am feeling very sad and hopeless';
