@@ -30,14 +30,15 @@ export default async function handler(req, res) {
     }
   }
 
-  const userPrompt = typeof body.user === 'string' ? body.user.trim() : '';
+  //const userPrompt = typeof body.user === 'string' ? body.user.trim() : '';
+  const userPrompt = 'I am feeling very sad and hopeless';
+  
   if (!userPrompt)
     return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
 
   if (!process.env.OPENAI_API_KEY)
     return res.status(500).json({ error: 'Missing OpenAI API key' });
-  if (userPrompt)
-    return res.status(400).json({ error: userPrompt });
+
   try {
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
