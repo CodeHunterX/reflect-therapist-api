@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
 
   return res.status(200).json({
-    reply: req.headers['x-app-secret']
+    reply: JSON.stringify(req.body)
   });
 
   /* ───── Parse JSON body safely ───── */
