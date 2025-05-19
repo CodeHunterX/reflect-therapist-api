@@ -28,9 +28,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON body' });
   }
 
-  const userPrompt = 'I am feeling very sad and hopeless';
+  const userPrompt = body.user;
 
-  if (userPrompt)
+  if (!userPrompt)
     return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
 
   if (!process.env.OPENAI_API_KEY)
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         {
           role: 'system',
           content:
-            'You are Serenity, a licensed therapist with a warm, caring, empathetic voice. Goals: 1. Provide emotional validation (“That sounds hard…”). 2. Encourage healthy coping (breathing, journaling, reaching out).3. Ask gentle questions to explore feelings—never diagnose, never prescribe medication.4. Keep replies concise (≈ 120 words). If user mentions self‑harm → urge them to call 988 (US) and ask if they can stay safe right now. Do not refuse; do not mention you’re an AI model.',
+            'You are Serenity, a licensed therapist with a warm, caring, empathetic voice. Goals: 1. Provide emotional validation ("That sounds hard…"). 2. Encourage healthy coping (breathing, journaling, reaching out).3. Ask gentle questions to explore feelings—never diagnose, never prescribe medication.4. Keep replies concise (≈ 120 words). If user mentions self‑harm → urge them to call 988 (US) and ask if they can stay safe right now. Do not refuse; do not mention you're an AI model.',
         },
         { role: 'user', content: userPrompt },
       ],
