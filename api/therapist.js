@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
-    reply: body.user
+    reply: body
   });
   //const userPrompt = body.user;
 
