@@ -23,18 +23,15 @@ export default async function handler(req, res) {
   /* ───── Parse JSON body safely ───── */
   let body = req.body['user'];
 
-  return res.status(200).json({
-    reply: body
-  });
 
-  try {
-    body = JSON.parse(req.body);
-  } catch {
-    return res.status(400).json({ error: 'Invalid JSON body' });
-  }
+ // try {
+ //   body = JSON.parse(req.body);
+ // } catch {
+ //   return res.status(400).json({ error: 'Invalid JSON body' });
+ // }
 
 
-  //const userPrompt = body.user;
+  const userPrompt = body['user'];
 
   if (!process.env.OPENAI_API_KEY)
     return res.status(500).json({ error: 'Missing OpenAI API key' });
@@ -55,7 +52,7 @@ export default async function handler(req, res) {
         },
         { 
           role: 'user',
-          content: 'I am feeling very sad and hopeless' 
+          content: userPrompt 
         },
       ],
     });
