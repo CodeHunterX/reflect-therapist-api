@@ -28,8 +28,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON body' });
   }
 
-  const userPrompt = body.user;
-
+  //const userPrompt = body.user;
+  const userPrompt = 'I am feeling very sad and hopeless';
   if (!userPrompt)
     return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
 
