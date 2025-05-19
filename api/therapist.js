@@ -1,18 +1,18 @@
 'use strict';
 
 /*───────────────────────────────────────────────
-  Config (env vars set in Vercel dashboard)
+  Config (set as Environment Variables in Vercel)
 ────────────────────────────────────────────────*/
-const OPENAI_KEY  = process.env.OPENAI_API_KEY  || '';
-const APP_SECRET  = process.env.APP_SHARED_SECRET || '';
+const OPENAI_KEY = process.env.OPENAI_API_KEY      || '';
+const APP_SECRET = process.env.APP_SHARED_SECRET   || '';
 
 const MODEL       = 'gpt-3.5-turbo-0125';   // or gpt-4o / gpt-4o-mini
 const TEMPERATURE = 0.8;
 
-const LIMIT       = 60;       // requests / minute / IP
-const WINDOW      = 60_000;   // 1 min
+const LIMIT  = 60;       // requests / minute / IP
+const WINDOW = 60_000;   // 1 minute
 
-/* in‑memory token bucket (OK for hobby scale) */
+/* Simple in-memory rate‑limit bucket (per IP) */
 const BUCKET = Object.create(null);
 
 /*───────────────────────────────────────────────
@@ -20,7 +20,7 @@ const BUCKET = Object.create(null);
 ────────────────────────────────────────────────*/
 function rateLimited(ip) {
   const bucket = BUCKET[ip] ?? { tokens: LIMIT, ts: Date.now() };
-  const now    = Date.now();
+  const now = Date.now();
 
   if (now - bucket.ts > WINDOW) {
     bucket.tokens = LIMIT;
@@ -34,7 +34,7 @@ function rateLimited(ip) {
 }
 
 async function moderate(text) {
-  const resp = await fetch('https://api.openai.com/v1/moderations', {
+  const r = await fetch('https://api.openai.com/v1/moderations', {
     method : 'POST',
     headers: {
       Authorization : `Bearer ${OPENAI_KEY}`,
@@ -42,45 +42,35 @@ async function moderate(text) {
     },
     body: JSON.stringify({ input: text }),
   });
-  const data = await resp.json();
-  return data?.results?.[0]?.flagged === true;
+  const d = await r.json();
+  return d?.results?.[0]?.flagged === true;
 }
 
 /*───────────────────────────────────────────────
-  Main handler
+  Serverless function
 ────────────────────────────────────────────────*/
 export default async function handler(req, res) {
-  /* ─────── CORS ─────── */
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-app-secret');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'POST only' });
 
-  /* ─────── Auth ─────── */
+  /* Shared secret */
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(401).json({ error: 'Unauthorized' });
 
-  /* ── Rate‑limit per IP ── */
+  /* Rate limit */
   const ip =
-    (req.headers['x-forwarded-for'] ?? '')
-      .toString()
-      .split(',')[0]
-      .trim() ||
-    req.socket?.remoteAddress ||
-    'unknown';
-
+    (req.headers['x-forwarded-for'] ?? '').toString().split(',')[0].trim() ||
+    req.socket?.remoteAddress || 'unknown';
   if (rateLimited(ip)) return res.status(429).json({ error: 'Rate limit' });
 
-  /* Vercel’s body parser populates req.body when Content‑Type is json.
-     Fallback to manual parse if needed (e.g. raw preview deploy). */
-  if (req.body == null || req.body === '') {
+  /* Parse body (fallback if body parser is off) */
+  if (req.body == null || typeof req.body !== 'object') {
     let buf = '';
     for await (const chunk of req) buf += chunk;
-    try {
-      req.body = buf ? JSON.parse(buf) : {};
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON body' });
-    }
+    try { req.body = buf ? JSON.parse(buf) : {}; }
+    catch { return res.status(400).json({ error: 'Invalid JSON body' }); }
   }
 
   const { user, history = [] } = req.body;
@@ -89,22 +79,22 @@ export default async function handler(req, res) {
       .status(400)
       .json({ error: 'Body must be { user: string, history?: [{role,text}] }' });
 
-  /* ───── Moderation ───── */
+  /* Moderation */
   if (await moderate(user))
     return res.status(400).json({ error: 'Message flagged by moderation' });
 
-  /* ───── Build messages array ───── */
+  /* Build prompt */
   const messages = [
     {
       role   : 'system',
       content: `
 You are Serenity, a licensed therapist with a warm, caring, empathetic voice.
-Your goals:
-1. Provide *emotional validation* (“That sounds hard…”).
-2. Encourage *healthy coping* (breathing, journaling, reaching out).
-3. Use gentle questions to help the user explore feelings—never diagnose, never prescribe medication.
-4. Keep replies concise (≈ 120 words).
-If user mentions self‑harm -> urge them to call local crisis line (988 in US) and ask if they can stay safe right now. Do not refuse; do not mention you’re an AI model.
+Goals:
+1. Provide emotional validation (“That sounds hard…”).
+2. Encourage healthy coping (breathing, journaling, reaching out).
+3. Ask gentle questions to explore feelings—never diagnose, never prescribe medication.
+4. Keep replies concise (≈ 120 words).
+If user mentions self‑harm → urge them to call 988 (US) and ask if they can stay safe right now. Do not refuse; do not mention you’re an AI model.
       `.trim(),
     },
     ...history.map((m) => ({
@@ -114,11 +104,10 @@ If user mentions self‑harm -> urge them to call local crisis line (988 in US) 
     { role: 'user', content: user },
   ];
 
-  /* Streaming?  /api/therapist?stream=1 */
   const stream = req.query?.stream === '1';
 
   try {
-    const oaResp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const oa = await fetch('https://api.openai.com/v1/chat/completions', {
       method : 'POST',
       headers: {
         Authorization : `Bearer ${OPENAI_KEY}`,
@@ -133,27 +122,25 @@ If user mentions self‑harm -> urge them to call local crisis line (988 in US) 
       }),
     });
 
-    if (!oaResp.ok) {
-      const text = await oaResp.text();
-      return res.status(oaResp.status).json({ error: text });
+    if (!oa.ok) {
+      const text = await oa.text();
+      return res.status(oa.status).json({ error: text });
     }
 
-    /* ─── Normal JSON response ─── */
     if (!stream) {
-      const data  = await oaResp.json();
+      const data  = await oa.json();
       const reply = data?.choices?.[0]?.message?.content ?? '';
       return res.status(200).json({ reply });
     }
 
-    /* ─── Streaming SSE ─── */
+    /* Streaming SSE */
     res.setHeader('Content-Type',  'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection',    'keep-alive');
-
-    oaResp.body.on('data', (chunk) => res.write(chunk));
-    oaResp.body.on('end',  ()     => res.end());
+    oa.body.on('data', (chunk) => res.write(chunk));
+    oa.body.on('end',  ()     => res.end());
   } catch (err) {
-    if (err?.name === 'AbortError') return;          // client aborted request
+    if (err?.name === 'AbortError') return;            // client aborted
     console.error(err);
     res.status(500).json({ error: err.message || 'Proxy error' });
   }
