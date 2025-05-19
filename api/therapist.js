@@ -1,19 +1,19 @@
-import fetch, { AbortError } from 'node-fetch'; // Node 20 has built‑in fetch, but node‑fetch keeps AbortError
+'use strict';
 
 /*───────────────────────────────────────────────
-  Config
+  Config (env vars set in Vercel dashboard)
 ────────────────────────────────────────────────*/
-const OPENAI_KEY  = process.env.OPENAI_API_KEY || '';
+const OPENAI_KEY  = process.env.OPENAI_API_KEY  || '';
 const APP_SECRET  = process.env.APP_SHARED_SECRET || '';
 
-const MODEL       = 'gpt-3.5-turbo-0125';   // or gpt-4o, gpt-4o-mini
+const MODEL       = 'gpt-3.5-turbo-0125';   // or gpt-4o / gpt-4o-mini
 const TEMPERATURE = 0.8;
 
-const LIMIT   = 60;        // requests / minute / IP
-const WINDOW  = 60_000;    // 1 min
+const LIMIT       = 60;       // requests / minute / IP
+const WINDOW      = 60_000;   // 1 min
 
 /* in‑memory token bucket (OK for hobby scale) */
-const BUCKET = {};
+const BUCKET = Object.create(null);
 
 /*───────────────────────────────────────────────
   Helpers
@@ -33,14 +33,14 @@ function rateLimited(ip) {
   return false;
 }
 
-async function moderate(content) {
+async function moderate(text) {
   const resp = await fetch('https://api.openai.com/v1/moderations', {
     method : 'POST',
     headers: {
       Authorization : `Bearer ${OPENAI_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ input: content }),
+    body: JSON.stringify({ input: text }),
   });
   const data = await resp.json();
   return data?.results?.[0]?.flagged === true;
@@ -50,17 +50,17 @@ async function moderate(content) {
   Main handler
 ────────────────────────────────────────────────*/
 export default async function handler(req, res) {
-  /* CORS */
+  /* ─────── CORS ─────── */
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-app-secret');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'POST only' });
 
-  /* Shared secret */
+  /* ─────── Auth ─────── */
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(401).json({ error: 'Unauthorized' });
 
-  /* Rate‑limit */
+  /* ── Rate‑limit per IP ── */
   const ip =
     (req.headers['x-forwarded-for'] ?? '')
       .toString()
@@ -71,18 +71,29 @@ export default async function handler(req, res) {
 
   if (rateLimited(ip)) return res.status(429).json({ error: 'Rate limit' });
 
-  /* Validate body */
-  const { user, history = [] } = req.body ?? {};
+  /* Vercel’s body parser populates req.body when Content‑Type is json.
+     Fallback to manual parse if needed (e.g. raw preview deploy). */
+  if (req.body == null || req.body === '') {
+    let buf = '';
+    for await (const chunk of req) buf += chunk;
+    try {
+      req.body = buf ? JSON.parse(buf) : {};
+    } catch {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+  }
+
+  const { user, history = [] } = req.body;
   if (typeof user !== 'string' || !Array.isArray(history))
     return res
       .status(400)
       .json({ error: 'Body must be { user: string, history?: [{role,text}] }' });
 
-  /* Moderation */
+  /* ───── Moderation ───── */
   if (await moderate(user))
     return res.status(400).json({ error: 'Message flagged by moderation' });
 
-  /* Build messages array */
+  /* ───── Build messages array ───── */
   const messages = [
     {
       role   : 'system',
@@ -96,7 +107,6 @@ Your goals:
 If user mentions self‑harm -> urge them to call local crisis line (988 in US) and ask if they can stay safe right now. Do not refuse; do not mention you’re an AI model.
       `.trim(),
     },
-    /* prior turns */
     ...history.map((m) => ({
       role   : m.role === 'user' ? 'user' : 'assistant',
       content: m.text,
@@ -128,14 +138,14 @@ If user mentions self‑harm -> urge them to call local crisis line (988 in US) 
       return res.status(oaResp.status).json({ error: text });
     }
 
-    /* ───── Non‑streaming JSON ──── */
+    /* ─── Normal JSON response ─── */
     if (!stream) {
       const data  = await oaResp.json();
       const reply = data?.choices?.[0]?.message?.content ?? '';
       return res.status(200).json({ reply });
     }
 
-    /* ───── Streaming SSE ───────── */
+    /* ─── Streaming SSE ─── */
     res.setHeader('Content-Type',  'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection',    'keep-alive');
@@ -143,7 +153,8 @@ If user mentions self‑harm -> urge them to call local crisis line (988 in US) 
     oaResp.body.on('data', (chunk) => res.write(chunk));
     oaResp.body.on('end',  ()     => res.end());
   } catch (err) {
-    if (err instanceof AbortError) return;           // client canceled
+    if (err?.name === 'AbortError') return;          // client aborted request
+    console.error(err);
     res.status(500).json({ error: err.message || 'Proxy error' });
   }
 }
