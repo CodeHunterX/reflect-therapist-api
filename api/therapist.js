@@ -25,9 +25,9 @@ export default async function handler(req, res) {
 
 
   return res.status(200).json({
-    reply: body
+    reply: JSON.stringify(body)
   });
-  
+
   try {
     body = JSON.parse(req.body);
   } catch {
