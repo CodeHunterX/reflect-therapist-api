@@ -29,7 +29,6 @@ export default async function handler(req, res) {
   }
 
   const userPrompt = 'I am feeling very sad and hopeless';
-  userPrompt = body.user;
 
   if (userPrompt)
     return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
