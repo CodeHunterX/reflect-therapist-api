@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
 
   /* ───── Parse JSON body safely ───── */
-  let body = req.body;
+  let body = req.body['user'];
 
   return res.status(200).json({
     reply: body
