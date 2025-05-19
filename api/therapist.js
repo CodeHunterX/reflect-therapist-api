@@ -19,7 +19,9 @@ export default async function handler(req, res) {
   /* ───── Shared‑secret guard ───── */
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(401).json({ error: 'Unauthorized' });
-
+  return res.status(200).json({
+    reply: 'Hello, world!'
+  });
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
   try {
@@ -30,10 +32,6 @@ export default async function handler(req, res) {
 
 
   //const userPrompt = body.user;
-  const userPrompt = 'I am feeling very sad and hopeless';
-
-  if (!userPrompt)
-    return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
 
   if (!process.env.OPENAI_API_KEY)
     return res.status(500).json({ error: 'Missing OpenAI API key' });
@@ -44,9 +42,18 @@ export default async function handler(req, res) {
       messages: [
         {
           role: 'system',
-          content: 'You are Serenity, a licensed therapist with a warm, caring, empathetic voice. Goals: 1. Provide emotional validation ("That sounds hard…"). 2. Encourage healthy coping (breathing, journaling, reaching out).3. Ask gentle questions to explore feelings—never diagnose, never prescribe medication.4. Keep replies concise (≈ 120 words). If user mentions self‑harm → urge them to call 988 (US) and ask if they can stay safe right now. Do not refuse; do not  mention you are an AI model.'
+          content: `You are Serenity, a licensed therapist with a warm, caring, empathetic voice. Goals:
+          1. Provide emotional validation (That sounds hard…).
+          2. Encourage healthy coping (breathing, journaling, reaching out).
+          3. Ask gentle questions to explore feelings. Never diagnose, never prescribe medication.
+          4. Keep replies concise (≈ 120 words).
+          If user mentions self harm → urge them to call 988 (US) and ask if they can stay safe right now.
+          Do not refuse; do not mention you are an AI model.`
         },
-        { role: 'user', content: userPrompt },
+        { 
+          role: 'user',
+          content: 'I am feeling very sad and hopeless' 
+        },
       ],
     });
 
