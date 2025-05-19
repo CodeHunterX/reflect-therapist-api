@@ -21,22 +21,27 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
 
   /* ───── Parse JSON body safely ───── */
-  let body = req.body['user'];
+  let body;
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+  } catch (err) {
+    console.error('Failed to parse request body:', err);
+    return res.status(400).json({ error: 'Invalid JSON body' });
+  }
 
+  const userPrompt = body.user;
+  if (!userPrompt) {
+    console.error('Missing user prompt in request body');
+    return res.status(400).json({ error: 'Request must include { "user": "<prompt>" }' });
+  }
 
- // try {
- //   body = JSON.parse(req.body);
- // } catch {
- //   return res.status(400).json({ error: 'Invalid JSON body' });
- // }
-
-
-  const userPrompt = body['user'];
-
-  if (!process.env.OPENAI_API_KEY)
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('Missing OpenAI API key');
     return res.status(500).json({ error: 'Missing OpenAI API key' });
+  }
 
   try {
+    console.log('Sending request to OpenAI with prompt:', userPrompt);
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
@@ -56,6 +61,12 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('❌ Error during OpenAI call:', err);
-    return res.status(500).json({ error: 'OpenAI request failed' });
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      type: err.type,
+      status: err.status
+    });
+    return res.status(500).json({ error: 'OpenAI request failed', details: err.message });
   }
 }
