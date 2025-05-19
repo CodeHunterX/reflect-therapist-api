@@ -23,6 +23,10 @@ export default async function handler(req, res) {
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
 
+  return res.status(200).json({
+    reply: body
+  });
+
   try {
     body = JSON.parse(req.body);
   } catch {
