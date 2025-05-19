@@ -20,16 +20,8 @@ export default async function handler(req, res) {
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(401).json({ error: 'Unauthorized' });
 
-
-  return res.status(200).json({
-    reply: req.body['user']
-  });
-
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
-
-
-
 
   try {
     body = JSON.parse(req.body);
