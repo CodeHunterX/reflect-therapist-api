@@ -22,15 +22,19 @@ export default async function handler(req, res) {
 
   /* ───── Parse JSON body safely ───── */
   let body = req.body;
+
+
+  return res.status(200).json({
+    reply: body
+  });
+  
   try {
     body = JSON.parse(req.body);
   } catch {
     return res.status(400).json({ error: 'Invalid JSON body' });
   }
 
-  return res.status(200).json({
-    reply: body
-  });
+
   //const userPrompt = body.user;
 
   if (!process.env.OPENAI_API_KEY)
