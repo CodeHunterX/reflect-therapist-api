@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
 
   return res.status(200).json({
-    reply: JSON.stringify(body)
+    reply: req.headers['x-app-secret']
   });
 
   try {
